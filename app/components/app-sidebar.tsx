@@ -3,11 +3,12 @@ import { getTranslations } from "next-intl/server";
 import Image from "next/image";
 
 import { LocaleSwitcher } from "@/components/locale-switcher";
-import UserMenu from "@/components/player-menu";
+import { PlayerProfile, PlayerLogout } from "@/components/player-menu";
 import { SidebarNav, type SidebarNavItem } from "@/components/sidebar-nav";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { getCurrentSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 const productLinkMeta = [
   { href: "/", icon: "home", labelKey: "home" },
@@ -22,19 +23,39 @@ export default async function AppSidebar() {
     getTranslations("brand"),
     getTranslations("nav"),
   ]);
+
   const isLoggedIn = sessionData !== null;
   const realUsername = sessionData?.user.username;
   const avatarUrl = sessionData?.user.avatarUrl;
+
+  let pendingFriendsCount = 0;
+  if (sessionData) {
+    const pendingCount = await prisma.friendship.count({
+      where: {
+        OR: [{ userLowId: sessionData.user.id }, { userHighId: sessionData.user.id }],
+        status: "PENDING",
+        NOT: { requestedById: sessionData.user.id },
+      },
+    });
+    pendingFriendsCount = pendingCount;
+  }
+
   const productLinks = productLinkMeta.map(({ href, icon, labelKey }) => ({
     href,
     icon,
     label: nav(labelKey),
   }));
+
   const socialLinks: SidebarNavItem[] = [
-    { href: "/friends", icon: "friends", label: nav("userMenu.friends") },
+    {
+      href: "/friends",
+      icon: "friends",
+      label: nav("userMenu.friends"),
+      notificationCount: pendingFriendsCount,
+    },
     { href: "/messages", icon: "messages", label: nav("userMenu.messages") },
     { href: "/profile", icon: "profile", label: nav("userMenu.profile") },
-    { href: "/account", icon: "account", label: "Settings" },
+    // { href: "/account", icon: "account", label: "Settings" },
   ];
 
   return (
@@ -67,23 +88,35 @@ export default async function AppSidebar() {
           </a>
 
           <div className="sidebar-account">
-            <div className="flex items-center gap-2 text-xs font-bold text-[var(--muted-strong)]">
-              <ShieldCheck aria-hidden="true" className="size-4 text-[var(--mint)]" />
-              Ranked Session
+            <div className="flex items-center justify-between gap-2 text-xs font-bold text-[var(--muted-strong)]">
+              <div className="flex items-center gap-2">
+                <ShieldCheck aria-hidden="true" className="size-4 text-[var(--mint)]" />
+                <span>Ranked Session</span>
+              </div>
+              <div className="-mr-2">
+                <LocaleSwitcher />
+              </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <LocaleSwitcher />
+
+            <div className="mt-3 flex flex-col gap-2">
               {isLoggedIn ? (
-                <UserMenu username={realUsername} avatarUrl={avatarUrl} />
+                <div className="flex w-full gap-2">
+                  <PlayerProfile
+                    username={realUsername}
+                    avatarUrl={avatarUrl}
+                    className="flex-1 overflow-hidden"
+                  />
+                  <PlayerLogout iconOnly />
+                </div>
               ) : (
-                <>
-                  <Button asChild variant="outline" size="sm">
+                <div className="flex w-full gap-2">
+                  <Button asChild variant="ghost" size="sm" className="flex-1">
                     <Link href="/login">{nav("login")}</Link>
                   </Button>
-                  <Button asChild size="sm">
+                  <Button asChild size="sm" className="flex-1">
                     <Link href="/signup">{nav("signup")}</Link>
                   </Button>
-                </>
+                </div>
               )}
             </div>
           </div>
@@ -98,13 +131,19 @@ export default async function AppSidebar() {
           </span>
         </Link>
         <div className="flex items-center gap-2">
-          <LocaleSwitcher />
           {isLoggedIn ? (
-            <UserMenu username={realUsername} avatarUrl={avatarUrl} />
+            <>
+              <PlayerProfile username={realUsername} avatarUrl={avatarUrl} />
+              <LocaleSwitcher />
+              <PlayerLogout iconOnly />
+            </>
           ) : (
-            <Button asChild size="sm">
-              <Link href="/login">{nav("login")}</Link>
-            </Button>
+            <>
+              <LocaleSwitcher />
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/login">{nav("login")}</Link>
+              </Button>
+            </>
           )}
         </div>
       </header>

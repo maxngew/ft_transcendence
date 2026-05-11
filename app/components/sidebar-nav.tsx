@@ -19,6 +19,7 @@ export type SidebarNavItem = {
   href: string;
   icon: keyof typeof icons;
   label: string;
+  notificationCount?: number;
 };
 
 type SidebarNavProps = {
@@ -53,6 +54,11 @@ export function SidebarNav({ groups }: SidebarNavProps) {
                 >
                   <Icon aria-hidden="true" className="size-4" />
                   <span>{item.label}</span>
+                  {item.notificationCount !== undefined && item.notificationCount > 0 && (
+                    <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--danger)]/20 px-2 text-[10px] leading-none font-bold text-white shadow-lg ring-0 outline-none">
+                      {item.notificationCount > 99 ? "99+" : item.notificationCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}

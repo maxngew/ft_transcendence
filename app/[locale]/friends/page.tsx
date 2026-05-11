@@ -50,12 +50,12 @@ export default async function FriendsPage({ params, searchParams }: FriendsPageP
   });
 
   const searchResults =
-    searchQuery.length > 0
+    searchQuery.length >= 3
       ? await prisma.user.findMany({
           where: {
             OR: [
-              { username: { contains: searchQuery, mode: "insensitive" } },
-              { displayName: { contains: searchQuery, mode: "insensitive" } },
+              { username: { startsWith: searchQuery, mode: "insensitive" } },
+              { displayName: { startsWith: searchQuery, mode: "insensitive" } },
             ],
             NOT: { id: currentUserId },
           },

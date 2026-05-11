@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 
 import { isGameUpdatePayload } from "../shared/match-events-validation";
 import { registerMatchSubscription } from "./handlers/match-subscription";
+import { resolveFriendshipNotificationTarget } from "./lib/friendship-notifications";
 import { removePresenceConnection, subscribeToPresence, type ConnectedUsers } from "./lib/presence";
 import { matchRoomId } from "./lib/rooms";
 import { authenticateSocketSession } from "./lib/socket-auth";
@@ -22,10 +23,14 @@ import {
 } from "./lib/socket-lifecycle";
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
+
 const rootEnvPath = resolve(currentDirectory, "../.env");
 
 if (existsSync(rootEnvPath)) {
-  config({ path: rootEnvPath, override: false });
+  config({
+    path: rootEnvPath,
+    override: false,
+  });
 }
 
 const hostname = process.env["SOCKET_HOST"] ?? "0.0.0.0";
@@ -49,9 +54,11 @@ const socketPingTimeoutMs = readPositiveIntegerEnv(
 
 function readCorsOrigins(): string[] {
   const configuredOrigins = process.env["SOCKET_CORS_ORIGIN"];
+
   if (!configuredOrigins) {
     return ["http://localhost:3000", "https://localhost:8443"];
   }
+
   return configuredOrigins.split(",").map((origin) => origin.trim());
 }
 
@@ -87,11 +94,21 @@ type QueuedPlayer = {
   socketId: string;
   userId: string;
 };
+
 let matchQueue: QueuedPlayer[] = [];
 
 io.on("connection", (socket) => {
   console.log(`Socket.IO client connected: ${socket.id}`);
+
   console.log(`[realtime] connected: ${socket.id}`);
+
+  // REGISTER USER ROOM
+  socket.on("register", (username: string) => {
+    const authUsername = socket.data.user?.username;
+    if (authUsername && authUsername === username) {
+      void socket.join(`user:${username}`);
+    }
+  });
 
   const stopSocketLifecycle = startSocketLifecycle(socket, {
     heartbeatIntervalMs: socketHeartbeatIntervalMs,
@@ -104,26 +121,27 @@ io.on("connection", (socket) => {
     subscribeToPresence(socket, io, connectedUsers);
   });
 
+  // FRIENDSHIP LIVE REFRESH
   socket.on("friendship:notify", async (targetUsername: string) => {
-    const senderId = socket.data.user?.id;
-    if (!senderId) return;
-
     try {
-      const target = await prisma.user.findUnique({ where: { username: targetUsername } });
-      if (!target) return;
+      const senderId = socket.data.user?.id;
+      const senderUsername = socket.data.user?.username;
+      if (!senderId || !senderUsername) return;
 
-      const userLowId = senderId < target.id ? senderId : target.id;
-      const userHighId = senderId < target.id ? target.id : senderId;
+      const verifiedTargetUsername = await resolveFriendshipNotificationTarget(
+        prisma,
+        senderId,
+        targetUsername,
+      );
+      if (!verifiedTargetUsername) return;
 
-      const friendship = await prisma.friendship.findUnique({
-        where: { userLowId_userHighId: { userLowId, userHighId } },
-      });
+      // REFRESH TARGET USER
+      io.to(`user:${verifiedTargetUsername}`).emit("friendship:refresh");
 
-      if (friendship) {
-        io.to(`user:${targetUsername}`).emit("friendship:refresh");
-      }
+      // REFRESH CURRENT USER
+      io.to(`user:${senderUsername}`).emit("friendship:refresh");
     } catch (error) {
-      console.error("Failed to verify friendship notification", error);
+      console.error("Failed friendship notification", error);
     }
   });
 
@@ -166,8 +184,14 @@ io.on("connection", (socket) => {
           },
         });
 
-        io.to(player1.socketId).emit("queue:matched", { matchId: match.id });
-        io.to(player2.socketId).emit("queue:matched", { matchId: match.id });
+        io.to(player1.socketId).emit("queue:matched", {
+          matchId: match.id,
+        });
+
+        io.to(player2.socketId).emit("queue:matched", {
+          matchId: match.id,
+        });
+
         console.log(`Created match ${match.id} for ${player1.userId} and ${player2.userId}`);
       } catch (error) {
         console.error("Failed to create match from queue", error);
@@ -193,6 +217,7 @@ const engineHandler = engine.handler();
 
 async function handleInternalGameUpdate(request: Request) {
   let payload: unknown;
+
   try {
     payload = await request.json();
   } catch {
@@ -204,14 +229,21 @@ async function handleInternalGameUpdate(request: Request) {
   }
 
   const room = matchRoomId(payload.matchId);
+
   io.to(room).emit("game:update", payload);
+
   console.log(`[realtime] broadcast game:update to ${room}`);
-  return Response.json({ ok: true, room });
+
+  return Response.json({
+    ok: true,
+    room,
+  });
 }
 
 Bun.serve({
   hostname,
   port,
+
   fetch(request, server) {
     const url = new URL(request.url);
 
@@ -231,10 +263,15 @@ Bun.serve({
       return engine.handleRequest(request, server);
     }
 
-    return new Response("Not Found", { status: 404 });
+    return new Response("Not Found", {
+      status: 404,
+    });
   },
+
   websocket: engineHandler.websocket,
+
   idleTimeout: engineHandler.idleTimeout,
+
   maxRequestBodySize: engineHandler.maxRequestBodySize,
 });
 

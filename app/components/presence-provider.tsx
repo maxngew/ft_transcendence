@@ -10,7 +10,10 @@ type PresenceContextType = {
   socket: Socket | null;
 };
 
-const PresenceContext = createContext<PresenceContextType>({ onlineUsers: [], socket: null });
+const PresenceContext = createContext<PresenceContextType>({
+  onlineUsers: [],
+  socket: null,
+});
 
 export function PresenceProvider({
   children,
@@ -32,10 +35,13 @@ export function PresenceProvider({
     }
 
     const nextSocket = createSocket(socketUrl);
+
     setSocket(nextSocket);
 
     const handleConnect = () => {
       nextSocket.emit("presence:subscribe");
+      // IMPORTANT
+      nextSocket.emit("register", currentUsername);
     };
 
     const handlePresenceUpdate = (users: string[]) => {
@@ -62,7 +68,14 @@ export function PresenceProvider({
   }, [currentUsername, socketUrl]);
 
   return (
-    <PresenceContext.Provider value={{ onlineUsers, socket }}>{children}</PresenceContext.Provider>
+    <PresenceContext.Provider
+      value={{
+        onlineUsers,
+        socket,
+      }}
+    >
+      {children}
+    </PresenceContext.Provider>
   );
 }
 
