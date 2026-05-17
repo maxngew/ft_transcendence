@@ -1,10 +1,11 @@
-import { Role, MatchStatus, Seat } from "../../../generated/prisma/enums";
-import { getCurrentSession } from "../../lib/auth";
-import { buildGameUpdatePayload } from "../../lib/matches/game-update";
-import { cleanupStaleMatchSessions } from "../../lib/matches/matchmaking";
-import { standardGomokuBoardSize } from "../../lib/matches/move-rules";
-import { publishGameUpdate } from "../../lib/matches/realtime-publisher";
-import { prisma } from "../../lib/prisma";
+import { hashPassword } from "better-auth/crypto";
+
+import { Role, MatchStatus, Seat, MatchVisibility } from "@/../generated/prisma/enums";
+import { getCurrentSession } from "@/lib/auth";
+import { buildGameUpdatePayload } from "@/lib/matches/game-update";
+import { standardGomokuBoardSize } from "@/lib/matches/move-rules";
+import { publishGameUpdate } from "@/lib/matches/realtime-publisher";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,11 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
-export async function POST() {
+function getOptionalTrimmedString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+export async function POST(request: Request) {
   const context = await getCurrentSession();
 
   if (!context) {
@@ -26,10 +31,39 @@ export async function POST() {
   }
 
   try {
+    const bodyValue = await request.json().catch(() => ({}));
+    const body =
+      typeof bodyValue === "object" && bodyValue !== null && !Array.isArray(bodyValue)
+        ? bodyValue
+        : {};
+    const name = getOptionalTrimmedString(body.name);
+    const rawPassword = getOptionalTrimmedString(body.password);
+    const visibility =
+      body.visibility === MatchVisibility.PRIVATE
+        ? MatchVisibility.PRIVATE
+        : MatchVisibility.PUBLIC;
+    const password =
+      visibility === MatchVisibility.PRIVATE && rawPassword
+        ? await hashPassword(rawPassword)
+        : null;
+
+    if (visibility === MatchVisibility.PRIVATE && !rawPassword) {
+      return Response.json(
+        {
+          error: "private_room_password_required",
+          message: "Private rooms require a password.",
+        },
+        { status: 400 },
+      );
+    }
+
     const match = await prisma.match.create({
       data: {
+        name,
+        password,
         boardSize: standardGomokuBoardSize,
         createdByUserId: context.user.id,
+        visibility,
         participants: {
           create: {
             displayNameSnapshot: context.user.displayName || context.user.username,
@@ -66,6 +100,7 @@ export async function POST() {
     }
 
     return Response.json({
+      displayName: creator.displayNameSnapshot,
       matchId: match.id,
       participantId: creator.id,
       role: creator.role,
@@ -86,10 +121,15 @@ export async function POST() {
 }
 
 export async function GET() {
+  const { cleanupStaleMatchSessions } = await import("@/lib/matches/matchmaking");
+
   await cleanupStaleMatchSessions();
 
   const matches = await prisma.match.findMany({
-    where: { status: MatchStatus.WAITING },
+    where: {
+      status: MatchStatus.WAITING,
+      visibility: MatchVisibility.PUBLIC,
+    },
     orderBy: { createdAt: "desc" },
     include: {
       participants: true,
@@ -98,6 +138,8 @@ export async function GET() {
 
   const body = matches.map((r) => ({
     matchId: r.id,
+    name: r.name,
+    requiresPassword: r.password !== null,
     status: r.status,
     ruleType: r.ruleType,
     boardSize: r.boardSize,

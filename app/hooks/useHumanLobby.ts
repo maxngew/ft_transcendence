@@ -18,6 +18,8 @@ type MatchParticipant = {
 
 type Match = {
   matchId: string;
+  name?: string | null;
+  requiresPassword?: boolean;
   status?: string;
   boardSize?: number;
   participants?: MatchParticipant[];
@@ -34,6 +36,12 @@ type ErrorResponse = {
   message?: string;
   detail?: string;
   error?: string;
+};
+
+export type CreateRoomOptions = {
+  name?: string;
+  password?: string;
+  visibility?: "PUBLIC" | "PRIVATE";
 };
 
 function getErrorMessage(payload: ErrorResponse | null, fallback: string) {
@@ -69,9 +77,10 @@ function mapMatchToEntry(match: Match, defaultPlayerName: string): LobbyEntry {
 
   return {
     matchId: match.matchId,
+    name: match.name,
     player: hostName,
     playerCount: match.participants?.length ?? 0,
-    requiresPassword: false,
+    requiresPassword: match.requiresPassword ?? false,
     status: match.status,
     boardSize: match.boardSize,
   };
@@ -131,58 +140,68 @@ export function useHumanLobby({
     void loadMatches();
   }, [loadMatches]);
 
-  const createRoom = useCallback(async () => {
-    setIsCreating(true);
-    setCreateError(null);
+  const createRoom = useCallback(
+    async (options?: CreateRoomOptions) => {
+      setIsCreating(true);
+      setCreateError(null);
 
-    try {
-      const response = await fetch("/api/matches", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      });
+      try {
+        const visibility = options?.visibility ?? "PUBLIC";
+        const response = await fetch("/api/matches", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: options?.name,
+            ...(visibility === "PRIVATE" && options?.password
+              ? { password: options.password }
+              : {}),
+            visibility,
+          }),
+        });
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          setCreateError(createT("signInRequired"));
+        if (!response.ok) {
+          if (response.status === 401) {
+            setCreateError(createT("signInRequired"));
+            return;
+          }
+
+          const errorPayload = (await response.json().catch(() => null)) as ErrorResponse | null;
+          setCreateError(
+            getErrorMessage(errorPayload, humanT("requestFailed", { status: response.status })),
+          );
           return;
         }
 
-        const errorPayload = (await response.json().catch(() => null)) as ErrorResponse | null;
-        setCreateError(
-          getErrorMessage(errorPayload, humanT("requestFailed", { status: response.status })),
-        );
-        return;
-      }
+        const result = (await response.json()) as MatchActionResponse;
 
-      const result = (await response.json()) as MatchActionResponse;
+        if (!result.matchId) {
+          setCreateError(createT("missingMatchId"));
+          return;
+        }
 
-      if (!result.matchId) {
-        setCreateError(createT("missingMatchId"));
-        return;
-      }
+        if (!result.participantId) {
+          setCreateError(createT("missingParticipantId"));
+          return;
+        }
 
-      if (!result.participantId) {
-        setCreateError(createT("missingParticipantId"));
-        return;
+        const storedSession = saveMatchSession(result, defaultPlayerName);
+        if (storedSession) {
+          onSessionReady?.(storedSession);
+        }
+        setJoinError(null);
+      } catch {
+        setCreateError(createT("networkError"));
+      } finally {
+        setIsCreating(false);
       }
-
-      const storedSession = saveMatchSession(result, defaultPlayerName);
-      if (storedSession) {
-        onSessionReady?.(storedSession);
-      }
-      setJoinError(null);
-    } catch {
-      setCreateError(createT("networkError"));
-    } finally {
-      setIsCreating(false);
-    }
-  }, [createT, defaultPlayerName, humanT, onSessionReady]);
+    },
+    [createT, defaultPlayerName, humanT, onSessionReady],
+  );
 
   const joinMatch = useCallback(
-    async (entry: LobbyEntry) => {
+    async (entry: LobbyEntry, password?: string) => {
       if (!entry.matchId) {
         return;
       }
@@ -196,7 +215,7 @@ export function useHumanLobby({
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ password }),
         });
 
         if (!response.ok) {

@@ -1,10 +1,12 @@
+import { verifyPassword } from "better-auth/crypto";
 import { z } from "zod";
 
 import { Prisma } from "@/../generated/prisma/client";
 import { MatchStatus, Role, Seat } from "@/../generated/prisma/enums";
 import { getCurrentSession } from "@/lib/auth";
+import { getChallengeMatchMetadata } from "@/lib/matches/challenge-metadata";
 import { buildGameUpdatePayload } from "@/lib/matches/game-update";
-import { publishGameUpdate } from "@/lib/matches/realtime-publisher";
+import { publishGameUpdate, publishQueueMatched } from "@/lib/matches/realtime-publisher";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +15,24 @@ const joinMatchRequestSchema = z.preprocess(
   (value) => (typeof value === "object" && value !== null && !Array.isArray(value) ? value : {}),
   z.object({
     displayName: z.string().trim().min(1).max(80).optional(),
+    password: z.string().optional(),
   }),
 );
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
+}
+
+async function verifyMatchPassword(hash: string, password: string | undefined) {
+  if (!password) {
+    return false;
+  }
+
+  try {
+    return await verifyPassword({ hash, password });
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -58,6 +73,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return Response.json({ error: "match_not_available" }, { status: 409 });
     }
 
+    const challengeMetadata = getChallengeMatchMetadata(match.metadata);
+    if (challengeMetadata && challengeMetadata.targetUserId !== context.user.id) {
+      return Response.json({ error: "challenge_not_for_user" }, { status: 403 });
+    }
+
     const alreadyJoined = match.participants.some(
       (participant) => participant.userId === context.user.id,
     );
@@ -68,6 +88,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const alreadyHasWhite = match.participants.some((p) => p.seat === Seat.WHITE);
     if (alreadyHasWhite) {
       return Response.json({ error: "match_full" }, { status: 409 });
+    }
+
+    if (match.password && !(await verifyMatchPassword(match.password, validation.data.password))) {
+      return Response.json(
+        { error: "invalid_password", message: "Incorrect password." },
+        { status: 401 },
+      );
     }
 
     const { joiner, updatedMatch } = await prisma.$transaction(async (tx) => {
@@ -97,6 +124,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           },
           participants: {
             orderBy: { joinedAt: "asc" },
+            include: {
+              user: {
+                select: {
+                  username: true,
+                },
+              },
+            },
           },
         },
       });
@@ -112,12 +146,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     try {
       const timeoutMs = Number(process.env["REALTIME_PUBLISH_TIMEOUT_MS"] ?? 2000);
+
       await publishGameUpdate(gameUpdate, timeoutMs);
+      const creator = updatedMatch.participants.find((p) => p.id !== joiner.id);
+      if (creator && creator.user?.username) {
+        const session = {
+          matchId: updatedMatch.id,
+          participantId: creator.id,
+          role: creator.role,
+          seat: creator.seat,
+          status: updatedMatch.status,
+          displayName: creator.displayNameSnapshot,
+          createdAt: updatedMatch.createdAt.toISOString(),
+          startedAt: updatedMatch.startedAt?.toISOString() || null,
+        };
+        await publishQueueMatched(creator.user.username, session, timeoutMs);
+      }
     } catch (publishError) {
       console.error(`[matches/${matchId}] realtime publish failed:`, getErrorMessage(publishError));
     }
 
     return Response.json({
+      displayName: joiner.displayNameSnapshot,
       matchId,
       participantId: joiner.id,
       role: joiner.role,

@@ -1,11 +1,12 @@
 "use client";
 
-import { UserPlus, UserMinus, UserCheck, X, MessageSquare, Loader2 } from "lucide-react";
+import { UserPlus, UserMinus, UserCheck, X, MessageSquare, Loader2, Swords } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useTransition, useEffect } from "react";
 
 import { usePresence } from "@/components/presence-provider";
+import { useChallengePlayer } from "@/hooks/useChallengePlayer";
 
 import { processFriendAction } from "./actions";
 
@@ -21,19 +22,23 @@ export default function ProfileActions({
   initialState,
 }: ProfileActionsProps) {
   const t = useTranslations("friends");
+  const profileT = useTranslations("profile.publicPage");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { socket } = usePresence();
+  const { challengePlayer, challengingUsername } = useChallengePlayer();
 
   useEffect(() => {
     if (!socket) return;
 
-    socket.on("friendship:refresh", () => {
+    const handleRefresh = () => {
       router.refresh();
-    });
+    };
+
+    socket.on("friendship:refresh", handleRefresh);
 
     return () => {
-      socket.off("friendship:refresh");
+      socket.off("friendship:refresh", handleRefresh);
     };
   }, [socket, router]);
 
@@ -55,6 +60,8 @@ export default function ProfileActions({
   const handleMessage = () => {
     router.push(`/messages?user=${targetUsername}`);
   };
+
+  const isChallenging = challengingUsername === targetUsername;
 
   return (
     <div className="mt-6 flex w-full max-w-[220px] flex-col gap-3">
@@ -125,17 +132,32 @@ export default function ProfileActions({
         <>
           <button
             type="button"
+            onClick={() => void challengePlayer(targetUsername)}
+            disabled={isChallenging}
+            className="btn btn-danger m-0 w-full px-4 py-2.5 text-sm font-bold disabled:opacity-50 disabled:hover:translate-y-0"
+          >
+            {isChallenging ? (
+              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+            ) : (
+              <Swords aria-hidden="true" className="h-4 w-4" />
+            )}
+            <span>{profileT("challenge")}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleMessage}
             className="btn m-0 w-full px-4 py-2.5 text-sm"
           >
             <MessageSquare aria-hidden="true" className="h-4 w-4" />
             <span>{t("actions.chat")}</span>
           </button>
+
           <button
             type="button"
             onClick={() => handleAction("REMOVE")}
             disabled={isPending}
-            className="btn btn-subtle m-0 w-full px-4 py-2.5 text-sm hover:border-[var(--danger)] hover:text-[var(--danger)] disabled:opacity-50 disabled:hover:translate-y-0"
+            className="btn btn-subtle m-0 w-full px-4 py-2.5 text-sm hover:border-(--danger) hover:text-(--danger) disabled:opacity-50 disabled:hover:translate-y-0"
           >
             {isPending ? (
               <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />

@@ -8,12 +8,19 @@ import { Server } from "socket.io";
 
 import { prisma } from "@/lib/prisma";
 
-import { readRealtimeInternalSecret } from "../shared/realtime-internal";
+import {
+  challengeDeclinedPath,
+  challengeReceivedPath,
+  readRealtimeInternalSecret,
+} from "../shared/realtime-internal";
 import { registerMatchSubscription } from "./handlers/match-subscription";
 import { registerMatchmakingQueue } from "./handlers/matchmaking-queue";
 import { resolveFriendshipNotificationTarget } from "./lib/friendship-notifications";
+import { handleInternalChallengeDeclined } from "./lib/internal-challenge-declined";
+import { handleInternalChallengeReceived } from "./lib/internal-challenge-received";
 import { handleInternalFriendshipUpdate } from "./lib/internal-friendship-update";
 import { handleInternalGameUpdate } from "./lib/internal-game-update";
+import { handleInternalQueueMatched } from "./lib/internal-queue-matched";
 import { removePresenceConnection, subscribeToPresence, type ConnectedUsers } from "./lib/presence";
 import { authenticateSocketSession } from "./lib/socket-auth";
 import {
@@ -98,7 +105,6 @@ io.on("connection", (socket) => {
 
   console.log(`[realtime] connected: ${socket.id}`);
 
-  // REGISTER USER ROOM
   socket.on("register", (username: string) => {
     const authUsername = socket.data.user?.username;
     if (authUsername && authUsername === username) {
@@ -118,7 +124,6 @@ io.on("connection", (socket) => {
     subscribeToPresence(socket, io, connectedUsers);
   });
 
-  // FRIENDSHIP LIVE REFRESH
   socket.on("friendship:notify", async (targetUsername: string) => {
     try {
       const senderId = socket.data.user?.id;
@@ -132,10 +137,8 @@ io.on("connection", (socket) => {
       );
       if (!verifiedTargetUsername) return;
 
-      // REFRESH TARGET USER
       io.to(`user:${verifiedTargetUsername}`).emit("friendship:refresh");
 
-      // REFRESH CURRENT USER
       io.to(`user:${senderUsername}`).emit("friendship:refresh");
     } catch (error) {
       console.error("Failed friendship notification", error);
@@ -174,6 +177,18 @@ Bun.serve({
 
     if (url.pathname === "/internal/friendship-update" && request.method === "POST") {
       return handleInternalFriendshipUpdate(request, io, realtimeInternalSecret);
+    }
+
+    if (url.pathname === "/internal/queue-matched" && request.method === "POST") {
+      return handleInternalQueueMatched(request, io, realtimeInternalSecret);
+    }
+
+    if (url.pathname === challengeDeclinedPath && request.method === "POST") {
+      return handleInternalChallengeDeclined(request, io, realtimeInternalSecret);
+    }
+
+    if (url.pathname === challengeReceivedPath && request.method === "POST") {
+      return handleInternalChallengeReceived(request, io, realtimeInternalSecret);
     }
 
     if (url.pathname === socketPath) {

@@ -1,6 +1,16 @@
 "use client";
 
-import { Check, MessageSquare, Search, Swords, UserMinus, UserPlus, Users, X } from "lucide-react";
+import {
+  Check,
+  Loader2,
+  MessageSquare,
+  Search,
+  Swords,
+  UserMinus,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import Form from "next/form";
 import { usePathname, useRouter } from "next/navigation";
@@ -8,6 +18,7 @@ import { useEffect, useState } from "react";
 
 import { AvatarToken, Badge, PageHeader, PageShell, Surface } from "@/components/gomoku-ui";
 import { usePresence } from "@/components/presence-provider";
+import { useChallengePlayer } from "@/hooks/useChallengePlayer";
 import { Link } from "@/i18n/navigation";
 
 import { removeFriend, respondToRequest, sendFriendRequest } from "./actions";
@@ -56,6 +67,7 @@ export default function FriendsContent({
   const router = useRouter();
   const pathname = usePathname();
   const t = useTranslations("friends");
+  const { challengePlayer, challengingUsername } = useChallengePlayer();
 
   const [activeTab, setActiveTab] = useState<TabKey>("friends");
 
@@ -76,12 +88,14 @@ export default function FriendsContent({
   useEffect(() => {
     if (!socket) return;
 
-    socket.on("friendship:refresh", () => {
+    const handleRefresh = () => {
       router.refresh();
-    });
+    };
+
+    socket.on("friendship:refresh", handleRefresh);
 
     return () => {
-      socket.off("friendship:refresh");
+      socket.off("friendship:refresh", handleRefresh);
     };
   }, [socket, router]);
 
@@ -166,6 +180,19 @@ export default function FriendsContent({
     router.refresh();
   };
 
+  const handleChallenge = async (username: string) => {
+    setStatusMessage(null);
+
+    const didSend = await challengePlayer(username);
+
+    if (!didSend) {
+      setStatusMessage({
+        text: "Could not send the challenge. Make sure realtime is connected and try again.",
+        isError: true,
+      });
+    }
+  };
+
   const activeRows =
     activeTab === "friends" ? friends : activeTab === "pending" ? pendingRequests : sentRequests;
 
@@ -182,8 +209,8 @@ export default function FriendsContent({
         <p
           className={`mb-5 rounded-md border px-4 py-3 text-sm font-bold ${
             statusMessage.isError
-              ? "border-[var(--danger)]/35 bg-[rgb(216_60_52_/_0.16)] text-[var(--danger)]"
-              : "border-[var(--mint)]/35 bg-[var(--mint-soft)] text-[var(--mint)]"
+              ? "border-(--danger)/35 bg-[rgb(216_60_52/0.16)] text-(--danger)"
+              : "border-(--mint)/35 bg-(--mint-soft) text-(--mint)"
           }`}
           role={statusMessage.isError ? "alert" : "status"}
           aria-live="polite"
@@ -195,7 +222,7 @@ export default function FriendsContent({
       <section className="grid gap-5">
         <Surface eyebrow={t("roster.eyebrow")} title={rosterTitle}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="inline-flex overflow-hidden rounded-md border border-[var(--panel-border-soft)] bg-[var(--panel-solid)] p-1">
+            <div className="inline-flex overflow-hidden rounded-md border border-(--panel-border-soft) bg-(--panel-solid) p-1">
               {[
                 {
                   key: "friends",
@@ -218,9 +245,7 @@ export default function FriendsContent({
                   type="button"
                   onClick={() => setActiveTab(tab.key as TabKey)}
                   className={`min-h-10 rounded-sm px-4 text-sm font-black ${
-                    activeTab === tab.key
-                      ? "bg-[var(--mint-soft)] text-[var(--mint)]"
-                      : "text-[var(--muted-text)]"
+                    activeTab === tab.key ? "bg-(--mint-soft) text-(--mint)" : "text-(--muted-text)"
                   }`}
                 >
                   {tab.label} <span className="tabular-nums">{tab.count}</span>
@@ -232,7 +257,7 @@ export default function FriendsContent({
             <div className="relative w-full max-w-sm">
               <Form action="" scroll={false} className="relative">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                  <Search className="size-4 text-[var(--muted-text)]" />
+                  <Search className="size-4 text-(--muted-text)" />
                 </div>
                 <input
                   id="friend-search"
@@ -249,17 +274,15 @@ export default function FriendsContent({
 
               {/* FLOATING SEARCH RESULTS */}
               {searchValue.trim().length >= 3 && searchValue === searchQuery && (
-                <div className="absolute top-full left-0 z-50 mt-2 w-full rounded-md border border-[var(--panel-border)] bg-[var(--panel-solid)] p-2 shadow-xl">
+                <div className="absolute top-full left-0 z-50 mt-2 w-full rounded-md border border-(--panel-border) bg-(--panel-solid) p-2 shadow-xl">
                   {searchResults.length === 0 ? (
-                    <p className="p-2 text-sm font-bold text-[var(--danger)]">
-                      {t("empty.search")}
-                    </p>
+                    <p className="p-2 text-sm font-bold text-(--danger)">{t("empty.search")}</p>
                   ) : (
                     <div className="grid gap-1">
                       {searchResults.map((user) => (
                         <article
                           key={user.id}
-                          className="flex items-center gap-3 rounded-sm p-2 hover:bg-white/[0.05]"
+                          className="flex items-center gap-3 rounded-sm p-2 hover:bg-white/5"
                         >
                           <AvatarToken size="sm" image={user.avatarUrl} name={user.displayName} />
 
@@ -298,7 +321,9 @@ export default function FriendsContent({
             <FriendsTable
               activeTab={activeTab}
               friends={activeRows}
+              challengingUsername={challengingUsername}
               onlineUsers={onlineUsers}
+              onChallenge={handleChallenge}
               onRemove={handleRemove}
               onRespond={handleRespond}
             />
@@ -311,14 +336,18 @@ export default function FriendsContent({
 
 function FriendsTable({
   activeTab,
+  challengingUsername,
   friends,
   onlineUsers,
+  onChallenge,
   onRemove,
   onRespond,
 }: {
   activeTab: TabKey;
+  challengingUsername: string | null;
   friends: FriendData[];
   onlineUsers: string[];
+  onChallenge: (username: string) => void;
   onRemove: (id: number) => void;
   onRespond: (id: number, accept: boolean) => void;
 }) {
@@ -326,7 +355,7 @@ function FriendsTable({
 
   return (
     <div
-      className="overflow-x-auto rounded-md border border-[var(--panel-border-soft)] bg-white/[0.025]"
+      className="overflow-x-auto rounded-md border border-(--panel-border-soft) bg-white/2.5"
       data-testid="friends-table"
     >
       <div className="min-w-[920px]">
@@ -349,11 +378,12 @@ function FriendsTable({
 
           const isRevealed = activeTab === "friends";
           const online = isRevealed && onlineUsers.includes(friend.username);
+          const isChallenging = challengingUsername === friend.username;
 
           return (
             <article
               key={friend.id}
-              className="grid min-h-16 grid-cols-[minmax(220px,1fr)_110px_100px_80px_80px_92px_170px] items-center gap-3 border-b border-[var(--panel-border-soft)] px-4 py-3 last:border-b-0 hover:bg-white/[0.045]"
+              className="grid min-h-16 grid-cols-[minmax(220px,1fr)_110px_100px_80px_80px_92px_170px] items-center gap-3 border-b border-(--panel-border-soft) px-4 py-3 last:border-b-0 hover:bg-white/4.5"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <AvatarToken image={friend.avatarUrl} name={friend.displayName} online={online} />
@@ -361,15 +391,15 @@ function FriendsTable({
                 <UserName user={friend} />
               </div>
 
-              <span className="font-black text-[var(--brass)] tabular-nums">
+              <span className="font-black text-(--brass) tabular-nums">
                 {friend.stats?.rating ?? 0}
               </span>
 
-              <span className="font-black text-[var(--mint)] tabular-nums">{winRate}%</span>
+              <span className="font-black text-(--mint) tabular-nums">{winRate}%</span>
 
-              <span className="font-black text-[var(--muted-strong)] tabular-nums">{wins}</span>
+              <span className="font-black text-(--muted-strong) tabular-nums">{wins}</span>
 
-              <span className="font-black text-[var(--muted-text)] tabular-nums">{losses}</span>
+              <span className="font-black text-(--muted-text) tabular-nums">{losses}</span>
 
               <Badge tone={online ? "mint" : "neutral"}>
                 {online ? t("status.online") : t("status.offline")}
@@ -388,10 +418,19 @@ function FriendsTable({
 
                     <button
                       type="button"
-                      className="icon-button"
+                      onClick={() => onChallenge(friend.username)}
+                      disabled={isChallenging}
+                      className="icon-button disabled:opacity-50"
                       aria-label={t("actions.challengeFriend", { name: friend.displayName })}
                     >
-                      <Swords aria-hidden="true" className="size-4 text-[var(--brass)]" />
+                      {isChallenging ? (
+                        <Loader2
+                          aria-hidden="true"
+                          className="size-4 animate-spin text-(--brass)"
+                        />
+                      ) : (
+                        <Swords aria-hidden="true" className="size-4 text-(--brass)" />
+                      )}
                     </button>
 
                     <button
@@ -400,7 +439,7 @@ function FriendsTable({
                       className="icon-button"
                       aria-label={t("actions.removeFriend", { name: friend.displayName })}
                     >
-                      <UserMinus aria-hidden="true" className="size-4 text-[var(--danger)]" />
+                      <UserMinus aria-hidden="true" className="size-4 text-(--danger)" />
                     </button>
                   </>
                 ) : activeTab === "pending" ? (
@@ -411,7 +450,7 @@ function FriendsTable({
                       className="icon-button"
                       aria-label={t("actions.acceptFriend", { name: friend.displayName })}
                     >
-                      <Check aria-hidden="true" className="size-4 text-[var(--mint)]" />
+                      <Check aria-hidden="true" className="size-4 text-(--mint)" />
                     </button>
 
                     <button
@@ -420,7 +459,7 @@ function FriendsTable({
                       className="icon-button"
                       aria-label={t("actions.declineFriend", { name: friend.displayName })}
                     >
-                      <X aria-hidden="true" className="size-4 text-[var(--danger)]" />
+                      <X aria-hidden="true" className="size-4 text-(--danger)" />
                     </button>
                   </>
                 ) : (
@@ -430,7 +469,7 @@ function FriendsTable({
                     className="icon-button"
                     aria-label={t("actions.cancelFriendRequest", { name: friend.displayName })}
                   >
-                    <X aria-hidden="true" className="size-4 text-[var(--danger)]" />
+                    <X aria-hidden="true" className="size-4 text-(--danger)" />
                   </button>
                 )}
               </div>
@@ -451,21 +490,21 @@ function UserName({
     <span className="min-w-0">
       <Link
         href={`/profile/${user.username}`}
-        className="block truncate font-black text-[var(--text)] no-underline"
+        className="block truncate font-black text-(--text) no-underline"
       >
         {user.displayName}
       </Link>
 
-      <span className="block truncate text-xs text-[var(--muted-text)]">@{user.username}</span>
+      <span className="block truncate text-xs text-(--muted-text)">@{user.username}</span>
     </span>
   );
 }
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="grid min-h-[360px] place-items-center rounded-md border border-dashed border-[var(--panel-border)] bg-white/[0.035] p-8 text-center">
+    <div className="grid min-h-[360px] place-items-center rounded-md border border-dashed border-(--panel-border) bg-white/3.5 p-8 text-center">
       <div>
-        <Users aria-hidden="true" className="mx-auto mb-4 size-10 text-[var(--brass)]" />
+        <Users aria-hidden="true" className="mx-auto mb-4 size-10 text-(--brass)" />
 
         <p className="m-0 font-serif text-2xl font-bold">{label}</p>
       </div>

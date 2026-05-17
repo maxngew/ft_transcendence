@@ -9,13 +9,13 @@ import {
   RefreshCcw,
   Swords,
   Trophy,
-  UserRound,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge, PageHeader, PageShell, Surface } from "@/components/gomoku-ui";
 import MatchBoard, { formatBoardPoint } from "@/components/match-board";
+import PlayerBar from "@/components/player-bar";
 import { useSocketGame } from "@/hooks/useSocketGame";
 import {
   clearStoredMatchSession,
@@ -73,18 +73,6 @@ function getErrorCode(payload: unknown): string | null {
 
   const errorPayload = payload as { error?: unknown };
   return typeof errorPayload.error === "string" ? errorPayload.error : null;
-}
-
-function seatTone(seat: Seat | null): "brass" | "mint" | "neutral" {
-  if (seat === "BLACK") {
-    return "brass";
-  }
-
-  if (seat === "WHITE") {
-    return "mint";
-  }
-
-  return "neutral";
 }
 
 function statusTone(
@@ -298,6 +286,7 @@ export default function HumanMatchRoom({
   const effectiveUpdate = selectLatestGameUpdateForSession(initialUpdate, liveUpdate, session);
   const board = effectiveUpdate?.board ?? state?.board ?? emptyBoard(state?.boardSize ?? 15);
   const mySeat = getSessionSeat(state, session) ?? session.seat;
+
   const participantBySeat = useMemo(() => {
     const participants = effectiveUpdate?.participants ?? [];
     return {
@@ -305,19 +294,49 @@ export default function HumanMatchRoom({
       WHITE: participants.find((participant) => participant.seat === "WHITE") ?? null,
     };
   }, [effectiveUpdate?.participants]);
+
   const moveHistory = useMemo(
     () => effectiveUpdate?.moves ?? state?.moves ?? [],
     [effectiveUpdate?.moves, state?.moves],
   );
+
   const canResign = effectiveUpdate?.status === "IN_PROGRESS" && mySeat !== null;
   const matchStatus = effectiveUpdate?.status ?? state?.status;
+  const canReturnToLobby = matchStatus === "FINISHED" || matchStatus === "CANCELLED";
   const isBusy = isRestoring || isLoadingState;
   const pageHeaderTitle = pageTitle(matchStatus, t);
   const pageHeaderLede = pageLede(matchStatus, t);
   const matchStatusText = matchStatusLabel(matchStatus, t);
   const socketStatusText = socketStatusLabel(socketStatus, t);
-  const statusLineText = statusLine(effectiveUpdate, mySeat, t);
-  const resultText = resultLabel(effectiveUpdate, t);
+
+  // Visual local timer countdown
+  const [timeLeft, setTimeLeft] = useState(600); // 10 minutes in seconds
+
+  useEffect(() => {
+    if (matchStatus !== "IN_PROGRESS" || !state) return;
+
+    // The game starts exactly when the second player takes their seat
+    const playerJoinTimes = state.participants
+      .filter((p) => p.role === "PLAYER")
+      .map((p) => new Date(p.joinedAt).getTime());
+
+    const startTime = playerJoinTimes.length === 2 ? Math.max(...playerJoinTimes) : Date.now();
+
+    const updateTimer = () => {
+      const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+      setTimeLeft(Math.max(0, 600 - elapsedSeconds));
+    };
+
+    updateTimer(); // Sync instantly on load
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [matchStatus, state]);
+
+  const formattedTime = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, "0")}`;
+
+  const blackName = participantBySeat.BLACK?.displayName ?? "Waiting...";
+  const whiteName = participantBySeat.WHITE?.displayName ?? "Waiting...";
 
   async function handleCellSelect(x: number, y: number) {
     if (!effectiveUpdate || !mySeat || effectiveUpdate.status !== "IN_PROGRESS") {
@@ -401,6 +420,27 @@ export default function HumanMatchRoom({
               <CircleDot aria-hidden="true" className="size-3.5" />
               {matchStatusText}
             </Badge>
+
+            {mySeat !== null && (
+              <button
+                type="button"
+                className="btn btn-danger m-0 min-h-11 px-4"
+                onClick={() => {
+                  void handleResign();
+                }}
+                disabled={!canResign || isResigning}
+                aria-busy={isResigning}
+                title="Resign from the match"
+              >
+                {isResigning ? (
+                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                ) : (
+                  <Flag aria-hidden="true" className="size-4" />
+                )}
+                <span className="hidden sm:inline">Resign</span>
+              </button>
+            )}
+
             <button
               type="button"
               className="btn btn-subtle m-0 min-h-11 px-4"
@@ -413,10 +453,17 @@ export default function HumanMatchRoom({
               <RefreshCcw aria-hidden="true" className="size-4" />
               {t("page.refresh")}
             </button>
+
             <button
               type="button"
               className="btn btn-subtle m-0 min-h-11 px-4"
-              onClick={onBackToLobby}
+              onClick={() => {
+                if (canReturnToLobby) {
+                  onBackToLobby();
+                }
+              }}
+              disabled={!canReturnToLobby}
+              title={canReturnToLobby ? "Back to lobby" : "Lobby unlocks when the match ends"}
             >
               <ArrowLeft aria-hidden="true" className="size-4" />
               {t("page.lobby")}
@@ -430,19 +477,7 @@ export default function HumanMatchRoom({
         data-testid="human-match-room"
       >
         <aside className="grid content-start gap-5">
-          <SeatPanel
-            participant={participantBySeat.BLACK}
-            isTurn={effectiveUpdate?.nextTurnSeat === "BLACK"}
-            isYou={mySeat === "BLACK"}
-            seat="BLACK"
-          />
-          <SeatPanel
-            participant={participantBySeat.WHITE}
-            isTurn={effectiveUpdate?.nextTurnSeat === "WHITE"}
-            isYou={mySeat === "WHITE"}
-            seat="WHITE"
-          />
-          <Surface eyebrow={t("connection.eyebrow")} icon={Radio} title={t("connection.title")}>
+          <Surface eyebrow="Connection" icon={Radio} title="Realtime">
             <div className="grid gap-3 text-sm">
               <DetailRow label={t("connection.socket")} value={socketStatusText} />
               <DetailRow
@@ -453,6 +488,14 @@ export default function HumanMatchRoom({
                 label={t("connection.you")}
                 value={mySeat ? seatLabel(mySeat, t) : t("connection.spectator")}
               />
+            </div>
+          </Surface>
+
+          <Surface eyebrow="Match" icon={Trophy} title="State">
+            <div className="grid gap-3 text-sm">
+              <DetailRow label="Match" value={session.matchId.slice(0, 8)} />
+              <DetailRow label="Board" value={`${board.length} x ${board.length}`} />
+              <DetailRow label="Status" value={statusLine(effectiveUpdate, mySeat, t)} />
             </div>
           </Surface>
         </aside>
@@ -471,50 +514,18 @@ export default function HumanMatchRoom({
             testId="human-match-board"
           />
 
-          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-            <div className="min-w-0">
-              <p className="m-0 text-sm font-black text-[var(--muted-strong)]">{statusLineText}</p>
-              {loadError || moveError ? (
-                <p role="alert" className="m-0 mt-2 text-sm font-bold text-[var(--danger)]">
-                  {moveError ?? loadError}
-                </p>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              className="btn btn-danger m-0 min-h-11 px-4"
-              onClick={() => {
-                void handleResign();
-              }}
-              disabled={!canResign || isResigning}
-              aria-busy={isResigning}
+          {loadError || moveError ? (
+            <p
+              role="alert"
+              className="mx-auto mt-6 max-w-[min(78vh,820px)] rounded-md border border-(--danger)/30 bg-(--danger)/10 p-3 text-center text-sm font-bold text-(--danger)"
             >
-              {isResigning ? (
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-              ) : (
-                <Flag aria-hidden="true" className="size-4" />
-              )}
-              {t("actions.resign")}
-            </button>
-          </div>
+              {moveError ?? loadError}
+            </p>
+          ) : null}
         </section>
 
         <aside className="grid content-start gap-5">
-          <Surface eyebrow={t("state.eyebrow")} icon={Trophy} title={t("state.title")}>
-            <div className="grid gap-3 text-sm">
-              <DetailRow label={t("state.match")} value={session.matchId.slice(0, 8)} />
-              <DetailRow label={t("state.board")} value={`${board.length} x ${board.length}`} />
-              <DetailRow
-                label={t("state.next")}
-                value={
-                  effectiveUpdate?.nextTurnSeat
-                    ? seatLabel(effectiveUpdate.nextTurnSeat, t)
-                    : t("state.none")
-                }
-              />
-              <DetailRow label={t("state.result")} value={resultText} />
-            </div>
-          </Surface>
+          <PlayerBar blackName={blackName} whiteName={whiteName} timer={formattedTime} />
 
           <Surface eyebrow={t("moves.eyebrow")} title={t("moves.title")}>
             <MoveHistory moves={moveHistory} participants={effectiveUpdate?.participants ?? []} />
@@ -525,36 +536,10 @@ export default function HumanMatchRoom({
   );
 }
 
-function SeatPanel({
-  isTurn,
-  isYou,
-  participant,
-  seat,
-}: {
-  isTurn: boolean;
-  isYou: boolean;
-  participant: ParticipantSummary | null;
-  seat: Seat;
-}) {
-  const t = useTranslations("human.match");
-  return (
-    <Surface
-      eyebrow={seatLabel(seat, t)}
-      icon={UserRound}
-      title={participant?.displayName ?? t("seat.openSeat")}
-    >
-      <div className="flex flex-wrap gap-2">
-        <Badge tone={seatTone(seat)}>{isYou ? t("seat.you") : t("seat.opponent")}</Badge>
-        {isTurn ? <Badge tone="mint">{t("seat.turn")}</Badge> : null}
-      </div>
-    </Surface>
-  );
-}
-
 function DetailRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex min-h-10 items-center justify-between gap-3 rounded-md border border-[var(--panel-border-soft)] bg-white/[0.035] px-3">
-      <span className="text-[var(--muted-text)]">{label}</span>
+    <div className="flex min-h-10 items-center justify-between gap-3 rounded-md border border-(--panel-border-soft) bg-white/3.5 px-3">
+      <span className="text-(--muted-text)">{label}</span>
       <span className="min-w-0 truncate font-black">{value}</span>
     </div>
   );
@@ -575,7 +560,7 @@ function MoveHistory({
 
   if (recentMoves.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-[var(--panel-border)] bg-white/[0.035] p-4 text-sm font-bold text-[var(--muted-text)]">
+      <div className="rounded-md border border-dashed border-(--panel-border) bg-white/3.5 p-4 text-sm font-bold text-(--muted-text)">
         {t("moves.empty")}
       </div>
     );
@@ -589,9 +574,9 @@ function MoveHistory({
         return (
           <div
             key={move.moveNumber}
-            className="grid min-h-11 grid-cols-[3rem_auto_minmax(0,1fr)] items-center gap-3 rounded-md border border-[var(--panel-border-soft)] bg-white/[0.035] px-3"
+            className="grid min-h-11 grid-cols-[3rem_auto_minmax(0,1fr)] items-center gap-3 rounded-md border border-(--panel-border-soft) bg-white/3.5 px-3"
           >
-            <span className="text-xs font-black text-[var(--muted-text)] tabular-nums">
+            <span className="text-xs font-black text-(--muted-text) tabular-nums">
               #{move.moveNumber}
             </span>
             <span
@@ -641,22 +626,4 @@ function statusLine(update: GameUpdatePayload | null, mySeat: Seat | null, t: Tr
   return t("statusLine.toMove", {
     seat: seatLabel(update.nextTurnSeat, t),
   });
-}
-
-function resultLabel(update: GameUpdatePayload | null, t: TranslationFunction) {
-  if (!update) {
-    return t("result.pending");
-  }
-
-  if (update.status === "CANCELLED") {
-    return t("result.cancelled");
-  }
-
-  if (update.status !== "FINISHED") {
-    return t("result.pending");
-  }
-
-  return update.winningSeat
-    ? t("result.won", { seat: seatLabel(update.winningSeat, t) })
-    : t("result.draw");
 }
