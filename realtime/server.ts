@@ -24,7 +24,14 @@ import { handleInternalChatMessage } from "./lib/internal-chat-message";
 import { handleInternalFriendshipUpdate } from "./lib/internal-friendship-update";
 import { handleInternalGameUpdate } from "./lib/internal-game-update";
 import { handleInternalQueueMatched } from "./lib/internal-queue-matched";
-import { removePresenceConnection, subscribeToPresence, type ConnectedUsers } from "./lib/presence";
+import {
+  createMemoryPresenceStore,
+  refreshPresenceConnection,
+  removePresenceConnection,
+  subscribeToPresence,
+  type ConnectedUsers,
+} from "./lib/presence";
+import { createRedisBackedPresenceStore, getRealtimeRedisErrorMessage } from "./lib/redis-presence";
 import { authenticateSocketSession } from "./lib/socket-auth";
 import {
   DEFAULT_SOCKET_HEARTBEAT_INTERVAL_MS,
@@ -69,6 +76,11 @@ const socketPingTimeoutMs = readPositiveIntegerEnv(
   "SOCKET_PING_TIMEOUT_MS",
   DEFAULT_SOCKET_PING_TIMEOUT_MS,
 );
+const realtimePresenceTtlSeconds = readPositiveIntegerEnv(
+  process.env,
+  "REALTIME_PRESENCE_TTL_SECONDS",
+  Math.max(60, Math.ceil(socketHeartbeatIntervalMs / 1000) * 4),
+);
 
 function readCorsOrigins(): string[] {
   const configuredOrigins = process.env["SOCKET_CORS_ORIGIN"];
@@ -107,6 +119,22 @@ io.bind(engine);
 io.use(authenticateSocketSession);
 
 const connectedUsers: ConnectedUsers = new Map();
+const presenceStore =
+  (await createRedisBackedPresenceStore({
+    env: process.env,
+    io,
+    presenceTtlSeconds: realtimePresenceTtlSeconds,
+  })) ?? createMemoryPresenceStore(connectedUsers);
+
+function logPresenceError(action: string, error: unknown) {
+  console.error(`[realtime] Failed to ${action} presence: ${getRealtimeRedisErrorMessage(error)}`);
+}
+
+function subscribeSocketToPresence(socket: Parameters<typeof subscribeToPresence>[0]) {
+  void subscribeToPresence(socket, io, presenceStore).catch((error: unknown) => {
+    logPresenceError("subscribe to", error);
+  });
+}
 
 io.on("connection", (socket) => {
   console.log(`Socket.IO client connected: ${socket.id}`);
@@ -122,15 +150,19 @@ io.on("connection", (socket) => {
 
   const stopSocketLifecycle = startSocketLifecycle(socket, {
     heartbeatIntervalMs: socketHeartbeatIntervalMs,
+    onHeartbeat: () =>
+      refreshPresenceConnection(socket, presenceStore).catch((error: unknown) => {
+        logPresenceError("refresh", error);
+      }),
   });
 
-  subscribeToPresence(socket, io, connectedUsers);
+  subscribeSocketToPresence(socket);
   registerMatchmakingQueue(socket, io);
   registerMatchSubscription(socket);
   registerChatSubscription(socket);
 
   socket.on("presence:subscribe", () => {
-    subscribeToPresence(socket, io, connectedUsers);
+    subscribeSocketToPresence(socket);
   });
 
   socket.on("friendship:notify", async (targetUsername: string) => {
@@ -159,7 +191,9 @@ io.on("connection", (socket) => {
 
     stopSocketLifecycle();
 
-    removePresenceConnection(socket, io, connectedUsers);
+    void removePresenceConnection(socket, io, presenceStore).catch((error: unknown) => {
+      logPresenceError("remove", error);
+    });
   });
 });
 
