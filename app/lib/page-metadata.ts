@@ -16,7 +16,6 @@ export type PageMetadataProps = {
 };
 
 const staticPagePaths = {
-  account: "/account",
   ai: "/ai",
   editProfile: "/profile/edit",
   forgotPassword: "/forgot-password",
@@ -32,11 +31,9 @@ const staticPagePaths = {
   signup: "/signup",
   status: "/status",
   terms: "/terms",
-  test: "/test",
 } as const satisfies Record<StaticMetadataPageKey, `/${string}`>;
 
 const noIndexPages = new Set<MetadataPageKey>([
-  "account",
   "editProfile",
   "forgotPassword",
   "friends",
@@ -44,7 +41,6 @@ const noIndexPages = new Set<MetadataPageKey>([
   "profile",
   "resetPassword",
   "status",
-  "test",
 ]);
 
 const openGraphLocales = {

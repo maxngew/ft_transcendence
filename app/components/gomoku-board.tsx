@@ -1,5 +1,7 @@
 "use client";
 
+/* oxlint-disable jsx-a11y/prefer-tag-over-role */
+
 import { useRef, useState, type KeyboardEvent } from "react";
 
 import { cn } from "@/lib/utils";

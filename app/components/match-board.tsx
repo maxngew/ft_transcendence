@@ -1,12 +1,30 @@
 "use client";
 
+/* oxlint-disable jsx-a11y/prefer-tag-over-role */
+
 import { useRef, useState, type KeyboardEvent } from "react";
 
 import { cn } from "@/lib/utils";
 
 import type { Cell, Seat } from "../../shared/match-events";
 
-const coordinateLabels = "ABCDEFGHJKLMNO".split("");
+const coordinateLabels = [
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F",
+  "G",
+  "H",
+  "J",
+  "K",
+  "L",
+  "M",
+  "N",
+  "O",
+  "P",
+];
 
 export function formatBoardPoint(position: { x: number; y: number }) {
   return `${coordinateLabels[position.x] ?? position.x + 1}${position.y + 1}`;

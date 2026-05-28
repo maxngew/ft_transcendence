@@ -27,6 +27,7 @@ describe("content security policy", () => {
     expect(policy).toContain("script-src-attr 'none'");
     expect(policy).toContain("style-src 'self' 'nonce-test-nonce'");
     expect(policy).toContain("style-src-elem 'self' 'nonce-test-nonce'");
+    expect(policy).toContain("'sha256-Wwucq8eX2r0YFymkQhDXm5hN0+FfSvI3s4JSSaqa4iw='");
     expect(policy).toContain("style-src-attr 'unsafe-hashes'");
     expect(policy).toContain("'sha256-/3kWSXHts8LrwfemLzY9W0tOv5I4eLIhrf0pT8cU0WI='");
     expect(policy).toContain("'sha256-zlqnbDt84zf1iSefLU/ImC54isoprH/MRiVZGskwexk='");
@@ -50,9 +51,15 @@ describe("content security policy", () => {
     const policy = createContentSecurityPolicy("test-nonce", {
       NODE_ENV: "development",
     });
+    const styleElementSources = directiveSources(policy, "style-src-elem");
 
     expect(policy).toContain("'unsafe-eval'");
     expect(policy).toContain("'unsafe-inline'");
+    expect(styleElementSources).toContain("'unsafe-inline'");
+    expect(styleElementSources).not.toContain("'nonce-test-nonce'");
+    expect(styleElementSources).not.toContain(
+      "'sha256-Wwucq8eX2r0YFymkQhDXm5hN0+FfSvI3s4JSSaqa4iw='",
+    );
     expect(policy).toContain("http://localhost:3001");
     expect(policy).toContain("ws://localhost:3001");
     expect(policy).toContain("http://127.0.0.1:3001");

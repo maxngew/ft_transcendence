@@ -26,13 +26,13 @@ type OAuthAccountConnectionsProps = {
 };
 
 export function OAuthAccountConnections({
-  callbackPath = "/account",
+  callbackPath = "/profile/edit",
   initialMessage = null,
   locale,
   providers,
 }: OAuthAccountConnectionsProps) {
   const router = useRouter();
-  const t = useTranslations("account.settings.sections.connections");
+  const t = useTranslations("profile.edit.connections");
   const [pendingProvider, setPendingProvider] = useState<OAuthProviderId | null>(null);
   const [message, setMessage] = useState<string | null>(initialMessage);
 
@@ -101,6 +101,13 @@ export function OAuthAccountConnections({
                 }
               >
                 <OAuthSocialButton
+                  ariaLabel={
+                    isConnecting
+                      ? t("connecting")
+                      : provider.linked
+                        ? t("connectedWithProvider", { provider: oauthProviderLabels[provider.id] })
+                        : t("connectWithProvider", { provider: oauthProviderLabels[provider.id] })
+                  }
                   busy={isConnecting}
                   disabled={Boolean(pendingProvider) || provider.linked || !provider.configured}
                   muted={provider.linked || Boolean(pendingProvider && !isPending)}
@@ -115,9 +122,9 @@ export function OAuthAccountConnections({
                       : t("connectWithProvider", { provider: oauthProviderLabels[provider.id] })}
                 </OAuthSocialButton>
                 {isConnecting ? (
-                  <span className="sr-only" role="status" aria-live="polite">
+                  <output className="sr-only" aria-live="polite">
                     {t("connecting")}
-                  </span>
+                  </output>
                 ) : null}
               </div>
 
