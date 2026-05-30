@@ -53,7 +53,7 @@ export async function uploadProfilePicture(formData: FormData) {
       return { error: t("invalidImage") };
     }
 
-    revalidatePath("/");
+    revalidatePath("/", "layout");
     return { success: true };
   } catch {
     return { error: t("pictureSaveFailed") };

@@ -110,7 +110,7 @@ describe("uploadProfilePicture", () => {
 
     expect(result).toEqual({ success: true });
     expect(saveProfileAvatar).toHaveBeenCalledWith("user-ada", expect.any(Buffer));
-    expect(revalidatePath).toHaveBeenCalledWith("/");
+    expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
   });
 
   test("returns a translated save failure when avatar persistence throws", async () => {

@@ -88,7 +88,7 @@ export default function ProfilePicture({ initialImage }: { initialImage?: string
         ref={fileInputRef}
         onChange={handleFileChange}
         className="hidden"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp"
         aria-label={t("changePhoto")}
       />
     </>
