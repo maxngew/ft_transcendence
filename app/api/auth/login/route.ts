@@ -70,6 +70,7 @@ export async function POST(request: Request) {
 
   try {
     const { headers, response } = await auth.api.signInEmail({
+      asResponse: false,
       body: {
         callbackURL: getLocalizedProfileUrl(request),
         email: validation.data.email,

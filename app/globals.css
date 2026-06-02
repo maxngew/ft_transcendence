@@ -184,6 +184,72 @@ select {
   display: none;
 }
 
+.mobile-topbar-brand {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.mobile-topbar-brand-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.12rem;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.mobile-nav-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgb(0 0 0 / 64%);
+  backdrop-filter: blur(5px);
+  animation: mobile-nav-overlay-in 180ms ease-out;
+}
+
+.mobile-nav-drawer {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  width: min(22rem, calc(100vw - 1rem));
+  padding: 1rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background:
+    linear-gradient(180deg, rgb(246 241 231 / 6%), transparent 32%),
+    linear-gradient(90deg, rgb(3 6 5 / 99%), rgb(7 16 13 / 98%));
+  border-right: 1px solid var(--panel-border-soft);
+  box-shadow: 28px 0 80px rgb(0 0 0 / 58%);
+  animation: mobile-nav-drawer-in 220ms ease-out;
+}
+
+.mobile-nav-drawer-header {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.1rem 0.85rem;
+  border-bottom: 1px solid var(--panel-border-soft);
+}
+
+@keyframes mobile-nav-overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes mobile-nav-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
 .app-content {
   width: calc(100% - var(--sidebar-width));
   min-width: 0;
@@ -1040,6 +1106,17 @@ a.command-panel {
   .hero h1,
   .page-title {
     font-size: 2.45rem;
+  }
+}
+
+@media (width <= 420px) {
+  .mobile-topbar {
+    gap: 0.5rem;
+    padding-inline: 0.55rem;
+  }
+
+  .mobile-topbar-brand-name {
+    display: none;
   }
 }
 

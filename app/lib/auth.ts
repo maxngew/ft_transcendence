@@ -26,11 +26,11 @@ import {
 } from "./auth-session-access";
 import { oauthProviderIds, type OAuthProviderId } from "./oauth-providers";
 import { prisma } from "./prisma";
+import { singleActiveSession } from "./single-active-session";
 import { authValidationLimits } from "./validation/auth-profile-limits";
 
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 const SESSION_REFRESH_SECONDS = 24 * 60 * 60;
-const SESSION_COOKIE_CACHE_SECONDS = 60;
 const usernamePattern = /^[A-Za-z0-9_-]+$/;
 const OAUTH_USERNAME_SUFFIX_LENGTH = 6;
 
@@ -286,9 +286,7 @@ export const auth = betterAuth({
       token: "sessionToken",
     },
     cookieCache: {
-      enabled: true,
-      maxAge: SESSION_COOKIE_CACHE_SECONDS,
-      strategy: "compact",
+      enabled: false,
     },
     expiresIn: SESSION_TTL_SECONDS,
     updateAge: SESSION_REFRESH_SECONDS,
@@ -350,7 +348,7 @@ export const auth = betterAuth({
       },
     },
   },
-  plugins: [nextCookies()],
+  plugins: [singleActiveSession(), nextCookies()],
 });
 
 type BetterAuthSessionData = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;

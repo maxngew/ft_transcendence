@@ -32,6 +32,7 @@ await mock.module("next/headers", () => ({
 }));
 
 type AuthApiCall = {
+  asResponse?: boolean;
   body: Record<string, unknown>;
   returnHeaders?: boolean;
 };
@@ -282,6 +283,7 @@ describe("auth API routes", () => {
       email: "max@example.com",
       password: "password123",
     });
+    expect(call.asResponse).toBe(false);
     expect(call.returnHeaders).toBe(true);
     expect(payload).toMatchObject({
       user: {
@@ -491,6 +493,7 @@ describe("auth API routes", () => {
       password: "password123",
       username: "max_player",
     });
+    expect(call.asResponse).toBe(false);
     expect(payload).toMatchObject({
       user: {
         id: user.id,

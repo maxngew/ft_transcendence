@@ -87,6 +87,12 @@ export const messages = {
     login: "Log In",
     signup: "Sign Up",
     languageLabel: "Language",
+    mobileMenu: {
+      close: "Close navigation",
+      description: "Browse game routes, account links, and legal pages.",
+      open: "Open navigation",
+      title: "Menu",
+    },
     localeNames: {
       en: "English",
       ja: "日本語",

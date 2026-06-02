@@ -88,6 +88,7 @@ export async function POST(request: Request) {
     }
 
     const { headers, response } = await auth.api.signUpEmail({
+      asResponse: false,
       body: {
         callbackURL: getLocalizedProfileUrl(request),
         email: validation.data.email,

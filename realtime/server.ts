@@ -42,7 +42,11 @@ import {
   remotePlayReconnectWindowMs,
 } from "./lib/remote-match-connections";
 import { matchRoomId } from "./lib/rooms";
-import { authenticateSocketSession } from "./lib/socket-auth";
+import {
+  authenticateSocketSession,
+  disconnectInvalidatedSocketSession,
+  revalidateSocketSession,
+} from "./lib/socket-auth";
 import {
   DEFAULT_SOCKET_HEARTBEAT_INTERVAL_MS,
   DEFAULT_SOCKET_PING_INTERVAL_MS,
@@ -219,10 +223,16 @@ io.on("connection", (socket) => {
 
   const stopSocketLifecycle = startSocketLifecycle(socket, {
     heartbeatIntervalMs: socketHeartbeatIntervalMs,
-    onHeartbeat: () =>
-      refreshPresenceConnection(socket, presenceStore).catch((error: unknown) => {
+    onHeartbeat: async () => {
+      if (!(await revalidateSocketSession(socket))) {
+        disconnectInvalidatedSocketSession(socket);
+        return;
+      }
+
+      await refreshPresenceConnection(socket, presenceStore).catch((error: unknown) => {
         logPresenceError("refresh", error);
-      }),
+      });
+    },
   });
 
   subscribeSocketToPresence(socket);

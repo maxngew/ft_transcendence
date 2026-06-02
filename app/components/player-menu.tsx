@@ -4,7 +4,7 @@ import { LogOut } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type MouseEventHandler } from "react";
 
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -15,9 +15,10 @@ interface UserProps {
   username?: string;
   avatarUrl?: string | null;
   className?: string;
+  onClick?: MouseEventHandler<HTMLAnchorElement>;
 }
 
-export function PlayerProfile({ username, avatarUrl, className }: UserProps) {
+export function PlayerProfile({ username, avatarUrl, className, onClick }: UserProps) {
   const t = useTranslations("nav.userMenu");
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const avatarSrc = avatarUrl && failedAvatarUrl !== avatarUrl ? avatarUrl : "/icons/Login.svg";
@@ -29,7 +30,7 @@ export function PlayerProfile({ username, avatarUrl, className }: UserProps) {
       asChild
       className={`flex items-center justify-start gap-2 bg-white/[0.04] px-2 ${className || ""}`}
     >
-      <Link href="/profile">
+      <Link href="/profile" onClick={onClick}>
         <Avatar className="h-6 w-6 overflow-hidden">
           <Image
             src={avatarSrc}

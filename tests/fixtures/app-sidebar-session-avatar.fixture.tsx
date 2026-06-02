@@ -10,6 +10,11 @@ type PlayerProfileProps = {
   username?: string;
 };
 
+type MobileNavigationProps = {
+  avatarUrl?: string | null;
+  username?: string;
+};
+
 type ElementWithChildren = {
   children?: ReactNode;
 };
@@ -42,6 +47,10 @@ function MockLocaleSwitcher() {
   return null;
 }
 
+function MockMobileNavigation(_props: MobileNavigationProps) {
+  return null;
+}
+
 function MockButton(_props: ElementWithChildren) {
   return null;
 }
@@ -66,6 +75,10 @@ await mock.module("@/components/sidebar-nav", () => ({
 
 await mock.module("@/components/locale-switcher", () => ({
   LocaleSwitcher: MockLocaleSwitcher,
+}));
+
+await mock.module("@/components/mobile-navigation", () => ({
+  MobileNavigation: MockMobileNavigation,
 }));
 
 await mock.module("@/components/ui/button", () => ({
@@ -116,15 +129,16 @@ getUnreadDirectMessageCountForUser.mockResolvedValue(2);
 
 const rendered = await AppSidebar();
 const profiles = collectPlayerProfileProps(rendered);
+const mobileNavigations = collectMobileNavigationProps(rendered);
 
 expect(getCurrentSession).toHaveBeenCalledTimes(1);
 expect(getCurrentSessionIdentity).not.toHaveBeenCalled();
-expect(profiles).toHaveLength(2);
-expect(profiles.map((profile) => profile.avatarUrl)).toEqual([
-  "/api/avatars/user-ada.png",
-  "/api/avatars/user-ada.png",
-]);
-expect(profiles.map((profile) => profile.username)).toEqual(["ada", "ada"]);
+expect(profiles).toHaveLength(1);
+expect(profiles[0]?.avatarUrl).toBe("/api/avatars/user-ada.png");
+expect(profiles[0]?.username).toBe("ada");
+expect(mobileNavigations).toHaveLength(1);
+expect(mobileNavigations[0]?.avatarUrl).toBe("/api/avatars/user-ada.png");
+expect(mobileNavigations[0]?.username).toBe("ada");
 
 function collectPlayerProfileProps(node: ReactNode) {
   const profiles: PlayerProfileProps[] = [];
@@ -149,4 +163,29 @@ function collectPlayerProfileProps(node: ReactNode) {
   visit(node);
 
   return profiles;
+}
+
+function collectMobileNavigationProps(node: ReactNode) {
+  const navigations: MobileNavigationProps[] = [];
+
+  function visit(child: ReactNode) {
+    if (Array.isArray(child)) {
+      child.forEach(visit);
+      return;
+    }
+
+    if (!isValidElement(child)) {
+      return;
+    }
+
+    if (child.type === MockMobileNavigation) {
+      navigations.push(child.props as MobileNavigationProps);
+    }
+
+    Children.forEach((child.props as ElementWithChildren).children, visit);
+  }
+
+  visit(node);
+
+  return navigations;
 }

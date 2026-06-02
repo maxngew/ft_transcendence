@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import Image from "next/image";
 
 import { LocaleSwitcher } from "@/components/locale-switcher";
+import { MobileNavigation } from "@/components/mobile-navigation";
 import { PlayerProfile, PlayerLogout } from "@/components/player-menu";
 import { SidebarNav, type SidebarNavItem } from "@/components/sidebar-nav";
 import { Button } from "@/components/ui/button";
@@ -19,8 +20,8 @@ const productLinkMeta = [
 ] as const satisfies ReadonlyArray<Omit<SidebarNavItem, "label"> & { labelKey: string }>;
 
 const legalLinkMeta = [
-  { href: "/terms", icon: Scale, labelKey: "terms" },
-  { href: "/privacy", icon: LockKeyhole, labelKey: "privacy" },
+  { href: "/terms", icon: "terms", Icon: Scale, labelKey: "terms" },
+  { href: "/privacy", icon: "privacy", Icon: LockKeyhole, labelKey: "privacy" },
 ] as const;
 
 export default async function AppSidebar() {
@@ -58,8 +59,9 @@ export default async function AppSidebar() {
     icon,
     label: nav(labelKey),
   }));
-  const legalLinks = legalLinkMeta.map(({ href, icon: Icon, labelKey }) => ({
+  const legalLinks = legalLinkMeta.map(({ href, icon, Icon, labelKey }) => ({
     href,
+    icon,
     Icon,
     label: footer(labelKey),
   }));
@@ -94,6 +96,7 @@ export default async function AppSidebar() {
         </Link>
 
         <SidebarNav
+          ariaLabel={nav("primaryLabel")}
           groups={[
             { label: nav("groups.play"), items: productLinks },
             { label: nav("groups.social"), items: socialLinks },
@@ -154,53 +157,32 @@ export default async function AppSidebar() {
         </div>
       </aside>
 
-      <header className="mobile-topbar">
-        <Link href="/" className="sidebar-brand min-w-0">
-          <Image src="/icons/Gomoku.svg" alt={brand("logoAlt")} width={40} height={40} priority />
-          <span className="min-w-0 truncate font-black" translate="no">
-            {brand("name")}
-          </span>
-        </Link>
-        <div className="flex min-w-0 items-center gap-1.5">
-          <nav
-            className="flex shrink-0 items-center gap-1"
-            aria-label={legal("terms.related.title")}
-          >
-            {legalLinks.map(({ href, Icon, label }) => (
-              <Button
-                key={href}
-                asChild
-                variant="ghost"
-                size="icon-sm"
-                className="text-[var(--muted-strong)]"
-              >
-                <Link href={href} aria-label={label} title={label}>
-                  <Icon aria-hidden="true" className="size-4" />
-                  <span className="sr-only">{label}</span>
-                </Link>
-              </Button>
-            ))}
-          </nav>
-          {isLoggedIn ? (
-            <>
-              <PlayerProfile
-                username={realUsername}
-                avatarUrl={avatarUrl}
-                className="max-w-28 sm:max-w-40"
-              />
-              <LocaleSwitcher />
-              <PlayerLogout iconOnly />
-            </>
-          ) : (
-            <>
-              <LocaleSwitcher />
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/login">{nav("login")}</Link>
-              </Button>
-            </>
-          )}
-        </div>
-      </header>
+      <MobileNavigation
+        avatarUrl={avatarUrl}
+        brand={{
+          logoAlt: brand("logoAlt"),
+          name: brand("name"),
+          subtitle: brand("subtitle"),
+        }}
+        groups={[
+          { label: nav("groups.play"), items: productLinks },
+          { label: nav("groups.social"), items: socialLinks },
+        ]}
+        isLoggedIn={isLoggedIn}
+        labels={{
+          closeMenu: nav("mobileMenu.close"),
+          description: nav("mobileMenu.description"),
+          login: nav("login"),
+          openMenu: nav("mobileMenu.open"),
+          primary: nav("primaryLabel"),
+          rules: nav("rules"),
+          session: nav("session"),
+          signup: nav("signup"),
+          title: nav("mobileMenu.title"),
+        }}
+        legalLinks={legalLinks.map(({ href, icon, label }) => ({ href, icon, label }))}
+        username={realUsername}
+      />
     </>
   );
 }

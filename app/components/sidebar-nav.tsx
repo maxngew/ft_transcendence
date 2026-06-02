@@ -24,14 +24,21 @@ export type SidebarNavItem = {
   notificationCount?: number;
 };
 
+export type SidebarNavGroup = {
+  label: string;
+  items: SidebarNavItem[];
+};
+
 type SidebarNavProps = {
+  ariaLabel?: string;
   groups: {
     label: string;
     items: SidebarNavItem[];
   }[];
+  onNavigate?: () => void;
 };
 
-export function SidebarNav({ groups }: SidebarNavProps) {
+export function SidebarNav({ ariaLabel = "Primary", groups, onNavigate }: SidebarNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { socket } = usePresence();
@@ -53,7 +60,7 @@ export function SidebarNav({ groups }: SidebarNavProps) {
   }, [router, socket]);
 
   return (
-    <nav className="sidebar-nav" aria-label="Primary">
+    <nav className="sidebar-nav" aria-label={ariaLabel}>
       {groups.map((group) => (
         <div key={group.label}>
           <p className="sidebar-nav-label">{group.label}</p>
@@ -71,6 +78,7 @@ export function SidebarNav({ groups }: SidebarNavProps) {
                   href={item.href}
                   className="sidebar-link"
                   aria-current={isActive ? "page" : undefined}
+                  onClick={onNavigate}
                 >
                   <Icon aria-hidden="true" className="size-4" />
                   <span>{item.label}</span>

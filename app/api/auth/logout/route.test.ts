@@ -40,6 +40,7 @@ describe("POST /api/auth/logout", () => {
     expect(await response.json()).toEqual({ success: true });
     expect(response.headers.get("set-cookie")).toBe("session=; Max-Age=0");
     expect(signOut).toHaveBeenCalledWith({
+      asResponse: false,
       headers: request.headers,
       request,
       returnHeaders: true,

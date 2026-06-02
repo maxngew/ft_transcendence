@@ -3,8 +3,10 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import type { Socket } from "socket.io-client";
 
+import { useRouter } from "@/i18n/navigation";
 import { createSocket } from "@/lib/socket-client";
 
+import { sessionInvalidatedEvent } from "../../shared/realtime-events";
 import { ChallengeListener } from "./challenge-listener";
 
 type PresenceContextType = {
@@ -29,6 +31,7 @@ export function PresenceProvider({
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [activeUsername, setCurrentUsername] = useState(currentUsername);
   const [socket, setSocket] = useState<Socket | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     setCurrentUsername(currentUsername);
@@ -58,10 +61,19 @@ export function PresenceProvider({
       setOnlineUsers([]);
     };
 
+    const handleSessionInvalidated = () => {
+      setOnlineUsers([]);
+      setCurrentUsername(undefined);
+      setSocket(null);
+      router.replace("/login");
+      router.refresh();
+    };
+
     nextSocket.on("connect", handleConnect);
     nextSocket.on("presence:update", handlePresenceUpdate);
     nextSocket.on("connect_error", handleUnavailable);
     nextSocket.on("disconnect", handleUnavailable);
+    nextSocket.on(sessionInvalidatedEvent, handleSessionInvalidated);
 
     handleConnect();
 
@@ -70,10 +82,11 @@ export function PresenceProvider({
       nextSocket.off("presence:update", handlePresenceUpdate);
       nextSocket.off("connect_error", handleUnavailable);
       nextSocket.off("disconnect", handleUnavailable);
+      nextSocket.off(sessionInvalidatedEvent, handleSessionInvalidated);
       nextSocket.disconnect();
       setSocket(null);
     };
-  }, [activeUsername]);
+  }, [activeUsername, router]);
 
   return (
     <PresenceContext.Provider

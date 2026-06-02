@@ -91,6 +91,12 @@ export const messages = {
     login: "登录",
     signup: "注册",
     languageLabel: "语言",
+    mobileMenu: {
+      close: "关闭导航",
+      description: "浏览对局、账户和法律信息页面。",
+      open: "打开导航",
+      title: "菜单",
+    },
     groups: {
       play: "对局",
       social: "社交",

@@ -1,4 +1,5 @@
 export const authCredentialPolicy = {
+  activeSessionsPerUser: 1,
   accountLinking: {
     enabled: true,
     requireLocalEmailVerified: true,

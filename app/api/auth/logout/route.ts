@@ -77,6 +77,7 @@ export async function POST(request: Request) {
 
   const authResponse = await auth.api
     .signOut({
+      asResponse: false,
       headers: request.headers,
       request,
       returnHeaders: true,

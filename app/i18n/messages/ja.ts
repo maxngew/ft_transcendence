@@ -91,6 +91,12 @@ export const messages = {
     login: "ログイン",
     signup: "登録",
     languageLabel: "言語",
+    mobileMenu: {
+      close: "ナビゲーションを閉じる",
+      description: "対局、アカウント、法的情報のページを表示します。",
+      open: "ナビゲーションを開く",
+      title: "メニュー",
+    },
     groups: {
       play: "対局",
       social: "交流",

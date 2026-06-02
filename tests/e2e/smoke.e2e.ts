@@ -32,12 +32,28 @@ test("home page renders the redesigned command center", async ({ page }) => {
   await expect(page.getByText("vs Human Lobby", { exact: true })).toHaveCount(0);
 });
 
-test("legal links navigate from desktop sidebar and mobile topbar", async ({ page }) => {
+test("legal links navigate from desktop sidebar and mobile drawer", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await expectLegalShellNavigation(page, "desktop sidebar");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expectLegalShellNavigation(page, "mobile topbar");
+  await expectLegalShellNavigation(page, "mobile drawer", true);
+});
+
+test("mobile drawer exposes primary navigation routes", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gotoAppRoute(page, "/");
+  await openMobileNavigation(page);
+
+  const dialog = page.getByRole("dialog", { name: "Menu" });
+  await expect(dialog.getByRole("link", { exact: true, name: "vs AI" })).toBeVisible();
+  await dialog.getByRole("link", { exact: true, name: "vs AI" }).click();
+
+  await expect(page).toHaveURL(/\/en\/ai$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Choose your opponent." }),
+  ).toBeVisible();
+  await expect(dialog).not.toBeVisible();
 });
 
 test("primary game routes render their new page shells", async ({ page }) => {
@@ -185,8 +201,11 @@ async function gotoAppRoute(page: Page, route: string) {
   await page.goto(route, { waitUntil: "domcontentloaded" });
 }
 
-async function expectLegalShellNavigation(page: Page, shellName: string) {
+async function expectLegalShellNavigation(page: Page, shellName: string, useMobileDrawer = false) {
   await gotoAppRoute(page, "/");
+  if (useMobileDrawer) {
+    await openMobileNavigation(page);
+  }
 
   const termsLink = page
     .getByRole("link", { name: "Terms of Service" })
@@ -205,6 +224,9 @@ async function expectLegalShellNavigation(page: Page, shellName: string) {
   await expect(page.getByRole("heading", { level: 1, name: "Terms of Service" })).toBeVisible();
 
   await gotoAppRoute(page, "/");
+  if (useMobileDrawer) {
+    await openMobileNavigation(page);
+  }
   await page
     .getByRole("link", { name: "Privacy Policy" })
     .filter({ visible: true })
@@ -212,6 +234,11 @@ async function expectLegalShellNavigation(page: Page, shellName: string) {
     .click();
   await expect(page).toHaveURL(/\/en\/privacy$/);
   await expect(page.getByRole("heading", { level: 1, name: "Privacy Policy" })).toBeVisible();
+}
+
+async function openMobileNavigation(page: Page) {
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await expect(page.getByRole("dialog", { name: "Menu" })).toBeVisible();
 }
 
 async function expectNoDocumentOverflow(page: Page, route: string) {
