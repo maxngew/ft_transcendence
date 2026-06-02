@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Cormorant_Garamond, Manrope } from "next/font/google";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
 import "../../node_modules/shadcn/dist/tailwind.css";
@@ -10,9 +11,11 @@ import "../globals.css";
 import { Suspense, type ReactNode } from "react";
 
 import AppSidebar from "@/components/app-sidebar";
+import { CspStyleNonce } from "@/components/csp-style-nonce";
 import { PresenceProvider, PresenceSessionSync } from "@/components/presence-provider";
 import { routing } from "@/i18n/routing";
 import { getCurrentSessionIdentity } from "@/lib/auth";
+import { CSP_NONCE_HEADER } from "@/lib/content-security-policy";
 import { getLocaleOpenGraphLocale, getRootMetadataBase } from "@/lib/page-metadata";
 import { cn } from "@/lib/utils";
 
@@ -91,6 +94,7 @@ export default async function RootLayout({ children, params }: RootLayoutProps) 
   }
 
   setRequestLocale(locale);
+  const nonce = (await headers()).get(CSP_NONCE_HEADER);
 
   return (
     <html
@@ -100,6 +104,7 @@ export default async function RootLayout({ children, params }: RootLayoutProps) 
     >
       <body>
         <NextIntlClientProvider>
+          <CspStyleNonce nonce={nonce} />
           <PresenceProvider>
             <Suspense fallback={null}>
               <PresenceSession />
